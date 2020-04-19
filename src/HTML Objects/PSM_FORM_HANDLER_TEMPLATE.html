@@ -1,0 +1,33 @@
+import PSM_FORM:FormHandlerBase;
+
+class FormHandler extends PSM_FORM:FormHandlerBase
+   method FormHandler(&poRequest As Request, &poResponse As Response);
+   
+   method OnSaveForm();
+
+   property string FormName;
+   property string FormWeblib;
+
+end-class;
+
+
+method FormHandler
+   
+   %Super = create PSM_FORM:FormHandlerBase(&poRequest, &poResponse);
+
+   %This.FormName = HTML.%BIND(:1);
+   %This.FormWeblib = Record.%BIND(:2);
+   
+end-method;
+
+
+method OnSaveForm
+   
+   Local JsonObject &oRequestJson = %Super.GetDataObject();
+   
+   /* @todo process request data... */
+   
+   /* echo back the request JSON for now */
+   %This.Response.Write(&oRequestJson.ToString());
+
+end-method;

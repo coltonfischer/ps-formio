@@ -1,0 +1,28 @@
+import %BIND(:1);
+
+Function IScript_Build()
+   
+   (create %BIND(:1)(%Request, %Response)).OnBuild();
+   
+End-Function;
+
+
+Function IScript_SaveSchema()
+   
+   (create %BIND(:1)(%Request, %Response)).OnSaveBuild();
+   
+End-Function;
+
+
+Function IScript_Render()
+   
+   (create %BIND(:1)(%Request, %Response)).OnRender();
+   
+End-Function;
+
+
+Function IScript_Submit()
+   
+   (create %BIND(:1)(%Request, %Response)).OnSaveForm();
+   
+End-Function;

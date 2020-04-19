@@ -1,0 +1,109 @@
+import PT_METADATA:MetaDataAPI:HTMLDefn;
+
+class FormHandlerBase
+   method FormHandlerBase(&poRequest As Request, &poResponse As Response);
+   
+   method OnBuild();
+   method OnRender();
+   method OnSaveBuild();
+   method OnSaveForm() abstract;
+   
+   method GetDataObject() Returns JsonObject;
+   
+   property string FormName abstract;
+   property string FormWeblib abstract;
+   
+   property Request Request;
+   property Response Response;
+   
+   property string FormSchema get;
+   property string SubmitFormURL get;
+   property string SaveSchemaURL get;
+   
+end-class;
+
+
+method FormHandlerBase
+   /+ &poRequest as Request, +/
+   /+ &poResponse as Response +/
+   
+   %This.Request = &poRequest;
+   %This.Response = &poResponse;
+   
+end-method;
+
+
+method OnBuild
+   
+   %This.Response.Write((GetHTMLText(HTML.PSM_FORMIO_BUILD, %This.FormSchema, %This.SaveSchemaURL)));
+   
+end-method;
+
+
+method OnRender
+   
+   %This.Response.Write((GetHTMLText(HTML.PSM_FORMIO_RENDER, %This.FormSchema, %This.SubmitFormURL)));
+   
+end-method;
+
+
+method OnSaveBuild
+   
+   Local JsonObject &oResponse = CreateJsonObject();
+   
+   try
+      
+      Local PT_METADATA:MetaDataAPI:HTMLDefn &oHTMLMetaData = create PT_METADATA:MetaDataAPI:HTMLDefn(%This.FormName);
+      
+      If Not &oHTMLMetaData.Open() Then
+         throw CreateException(0, 0, "Could Not Open HTML Object");
+      End-If;
+      
+      &oHTMLMetaData.ContentData = %This.Request.GetContentBody();
+      
+      If Not (&oHTMLMetaData.Save()) Then
+         throw CreateException(0, 0, "Could Not Save HTML Object");
+      End-If;
+   catch Exception &e
+      &oResponse.AddProperty("error", EscapeJavascriptString(&e.ToString()));
+   end-try;
+   
+   %This.Response.Write(&oResponse.ToString());
+   
+end-method;
+
+
+method GetDataObject
+   /+ Returns JsonObject +/
+   
+   Local JsonParser &jpParser = CreateJsonParser();
+   Local boolean &bRet = &jpParser.Parse(%This.Request.GetContentBody());
+   
+   Local JsonObject &joRoot = &jpParser.GetRootObject();
+   Return &joRoot.GetJsonObject("data");
+   
+end-method;
+
+
+get FormSchema
+   /+ Returns String +/
+   
+   Return GetHTMLText(@("HTML." | %This.FormName));
+   
+end-get;
+
+
+get SubmitFormURL
+   /+ Returns String +/
+   
+   Return GenerateScriptContentURL(%Portal, %Node, @("RECORD." | %This.FormWeblib), Field.ISCRIPT1, "FieldFormula", "IScript_Submit");
+   
+end-get;
+
+
+get SaveSchemaURL
+   /+ Returns String +/
+   
+   Return GenerateScriptContentURL(%Portal, %Node, @("RECORD." | %This.FormWeblib), Field.ISCRIPT1, "FieldFormula", "IScript_SaveSchema");
+   
+end-get;

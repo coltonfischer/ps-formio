@@ -1,0 +1,435 @@
+import PSM_FORM:FormHandlerBase;
+import %metadata:Key;
+import PT_METADATA:MetaDataAPI:HTMLDefn;
+import %metadata:AppPackageDefn:AppPackageDefn_Manager;
+import %metadata:AppPackageDefn:AppPackageDefn;
+import %metadata:AppPackageDefn:ApmClassList;
+import %metadata:AppPackageDefn:ApmClassDefn;
+import %metadata:PeopleCodeProgram:PeopleCodeProgram_Manager;
+import %metadata:PeopleCodeProgram:PeopleCodeProgram;
+import %metadata:RecordDefn:RecordDefn;
+import %metadata:RecordDefn:RecordDefn_Manager;
+import %metadata:RecordDefn:RecField;
+import %metadata:PermissionListDefn:PermissionListDefn_Manager;
+import %metadata:PermissionListDefn:PermissionListDefn;
+import %metadata:PermissionListDefn:ClmAuthItem;
+
+
+class FormHandler extends PSM_FORM:FormHandlerBase
+   method FormHandler(&poRequest As Request, &poResponse As Response);
+   
+   method OnSaveForm();
+   
+   property string FormName;
+   property string FormWeblib;
+   
+private
+   
+   method SaveFormSchema(&psJsonSchema As string, &psName As string, &psDescr As string);
+   method CreateFormHandler(&psName As string, &psDescr As string, &psFormWebLib As string);
+   method CreateFormServices(&psId As string, &psName As string, &psDescr As string);
+   method ProvisionSecurity(&psPermissionList As string, &psRecord As string, &pasFunctionNames As array of string);
+   
+   method CreateFormAppPackage(&psName As string, &psDescr As string);
+   method CreateFormAppClass(&psName As string, &psFormWebLib As string);
+   
+   method CreateWeblib(&psId As string, &psDescr As string);
+   method CreateIscripts(&psId As string, &psName As string);
+   
+   method CreateCrefs(&psFormId As string, &psWeblib As string, &psParentFolder As string, &psLabel As string);
+   
+   Constant &APP_CLASS_NAME = "FormHandler";
+   Constant &APP_CLASS_EVENT = "OnExecute";
+   Constant &RECORD_NAME_PREFIX = "WEBLIB_";
+   Constant &RECORD_FIELD = "ISCRIPT1";
+   Constant &RECORD_FIELD_EVENT = "FieldFormula";
+   
+   Constant &ISCRIPT_RENDER = "IScript_Render";
+   Constant &ISCRIPT_SUBMIT = "IScript_Submit";
+   Constant &ISCRIPT_BUILD = "IScript_Build";
+   Constant &ISCRIPT_SAVE_SCHEMA = "IScript_SaveSchema";
+   
+end-class;
+
+
+method FormHandler
+   /+ &poRequest as Request, +/
+   /+ &poResponse as Response +/
+   
+   %Super = create PSM_FORM:FormHandlerBase(&poRequest, &poResponse);
+   
+   %This.FormName = HTML.PSM_REGISTER_FORM;
+   %This.FormWeblib = Record.WEBLIB_PSM_FORM;
+   
+end-method;
+
+
+method OnSaveForm
+   /+ Extends/implements PSM_FORM:FormHandlerBase.OnSaveForm +/
+   
+   Local JsonObject &oResponse = CreateJsonObject();
+   
+   Local JsonObject &joData = %Super.GetDataObject();
+   
+   Local string &sFormWebLib = &joData.GetString("formWeblib");
+   
+   Local string &sFormName = &joData.GetString("formName");
+   Local string &sFormDescr = &joData.GetString("formDescription");
+   Local string &sUserPermissionList = &joData.GetString("userSecurity");
+   Local string &sAdminPermissionList = &joData.GetString("adminSecurity");
+   
+   Local boolean &bCreateCref = &joData.GetBoolean("createCref");
+   Local string &sCrefLabel = &joData.GetString("crefLabel");
+   Local string &sParentFolder = &joData.GetString("parentFolder");
+   
+   try
+      
+      %This.SaveFormSchema("{}", &sFormName, &sFormDescr);
+      
+      %This.CreateFormHandler(&sFormName, &sFormDescr, &sFormWebLib);
+      
+      %This.CreateFormServices(&sFormWebLib, &sFormName, &sFormDescr);
+      
+      If &bCreateCref Then
+         %This.CreateCrefs(&sFormName, &sFormWebLib, &sParentFolder, &sCrefLabel);
+      End-If;
+      
+      If All(&sUserPermissionList) Then
+         %This.ProvisionSecurity(&sUserPermissionList, &sFormWebLib, CreateArray(&ISCRIPT_RENDER, &ISCRIPT_SUBMIT));
+      End-If;
+      
+      If All(&sAdminPermissionList) Then
+         %This.ProvisionSecurity(&sAdminPermissionList, &sFormWebLib, CreateArray(&ISCRIPT_BUILD, &ISCRIPT_SAVE_SCHEMA));
+      End-If;
+      
+   catch Exception &e
+      
+      &oResponse.AddProperty("error", EscapeJavascriptString(&e.ToString()));
+      
+   end-try;
+   
+   %This.Response.Write(&oResponse.ToString());
+   
+end-method;
+
+
+method SaveFormSchema
+   /+ &psJsonSchema as String, +/
+   /+ &psName as String, +/
+   /+ &psDescr as String +/
+   
+   Local string &sHTMLObjName = &psName;
+   Local string &sHTMLObjContent = &psJsonSchema;
+   Local string &sHTMLObjDescr = &psDescr;
+   
+   Local PT_METADATA:MetaDataAPI:HTMLDefn &oHTMLMetaData;
+   &oHTMLMetaData = create PT_METADATA:MetaDataAPI:HTMLDefn(&sHTMLObjName);
+   
+   If Not &oHTMLMetaData.Open() Then
+      throw CreateException(0, 0, "Could Not Open HTML Object %1", &sHTMLObjName);
+   End-If;
+   
+   If Not (&oHTMLMetaData.IsNew) Then
+      throw CreateException(0, 0, "HTML Object %1 already exists", &sHTMLObjName);
+   End-If;
+   
+   &oHTMLMetaData.ContentData = &sHTMLObjContent;
+   &oHTMLMetaData.Description = &sHTMLObjDescr;
+   
+   If Not (&oHTMLMetaData.Save()) Then
+      throw CreateException(0, 0, "Could Not Save HTML Object %1", &sHTMLObjName);
+   End-If;
+   
+end-method;
+
+
+method CreateFormHandler
+   /+ &psName as String, +/
+   /+ &psDescr as String, +/
+   /+ &psFormWebLib as String +/
+   
+   /* Create App Package and Class */
+   %This.CreateFormAppPackage(&psName, &psDescr);
+   
+   /* Add PeopleCode to App Class */
+   %This.CreateFormAppClass(&psName, &psFormWebLib);
+   
+end-method;
+
+
+method CreateFormServices
+   /+ &psId as String, +/
+   /+ &psName as String, +/
+   /+ &psDescr as String +/
+   
+   /* Create Web Library */
+   %This.CreateWeblib(&psId, &psDescr);
+   
+   /* Add iScript Function */
+   %This.CreateIscripts(&psId, &psName);
+   
+end-method;
+
+
+method CreateFormAppPackage
+   /+ &psName as String, +/
+   /+ &psDescr as String +/
+   
+   Local %metadata:AppPackageDefn:AppPackageDefn_Manager &oAppPackageDefn_Manager;
+   &oAppPackageDefn_Manager = create %metadata:AppPackageDefn:AppPackageDefn_Manager();
+   
+   Local %metadata:Key &okey = create %metadata:Key();
+   &okey.AddItem(key:Class_AppPackageID, &psName);
+   &okey.AddItem(key:Class_PackageRoot, &psName);
+   &okey.AddItem(key:Class_PackageQualifyPath, ".");
+   
+   If &oAppPackageDefn_Manager.DefnExists(&okey) Then
+      throw CreateException(0, 0, "App Package already exists");
+   End-If;
+   
+   Local %metadata:AppPackageDefn:AppPackageDefn &AppPackageDefn = &oAppPackageDefn_Manager.CreateDefn();
+   
+   &AppPackageDefn.PackageId = &psName;
+   &AppPackageDefn.PackageLevel = 0;
+   &AppPackageDefn.PackageRoot = &psName;
+   &AppPackageDefn.QualifyPath = ".";
+   &AppPackageDefn.Descr = &psDescr;
+   &AppPackageDefn.DescrLong = &psDescr;
+   
+   Local %metadata:AppPackageDefn:ApmClassList &oClassList = &AppPackageDefn.Append_ApmDefnList#hDefnClassList(&AppPackageDefn.Count_ApmDefnList#hDefnClassList);
+   &oClassList.ApmClassKey#szClassId = &APP_CLASS_NAME;
+   &oClassList.ApmClassKey#szPackageRoot = &psName;
+   &oClassList.ApmClassKey#szQualifyPath = ":";
+   
+   Local %metadata:AppPackageDefn:ApmClassDefn &oClassDefn = &oClassList.Append_ClassDefn(&oClassList.Count_ClassDefn);
+   &oClassDefn.ClassId = &APP_CLASS_NAME;
+   
+   Local boolean &bRet = &AppPackageDefn.SaveNewDefn();
+   
+   If Not (&bRet) Then
+      throw CreateException(0, 0, "Could not save new App Package Defn");
+   End-If;
+   
+end-method;
+
+
+method CreateFormAppClass
+   /+ &psName as String, +/
+   /+ &psFormWebLib as String +/
+   
+   Local %metadata:PeopleCodeProgram:PeopleCodeProgram_Manager &oPeopleCodeProgram_Manager;
+   &oPeopleCodeProgram_Manager = create %metadata:PeopleCodeProgram:PeopleCodeProgram_Manager();
+   
+   Local %metadata:Key &okey = create %metadata:Key();
+   &okey.AddItem(key:Class_ApplicationPackage, &psName);
+   &okey.AddItem(key:Class_ApplicationClass, &APP_CLASS_NAME);
+   &okey.AddItem(key:Class_Method, &APP_CLASS_EVENT);
+   
+   If &oPeopleCodeProgram_Manager.DefnExists(&okey) Then
+      throw CreateException(0, 0, "App Class already exists");
+   End-If;
+   
+   Local %metadata:PeopleCodeProgram:PeopleCodeProgram &PeopleCodeProgramDefn = &oPeopleCodeProgram_Manager.CreateDefn();
+   
+   &PeopleCodeProgramDefn.ObjectID#0# = key:Class_ApplicationPackage;
+   &PeopleCodeProgramDefn.ObjectID#1# = key:Class_ApplicationClass;
+   &PeopleCodeProgramDefn.ObjectID#2# = key:Class_Method;
+   &PeopleCodeProgramDefn.ObjectValue#0# = &psName;
+   &PeopleCodeProgramDefn.ObjectValue#1# = &APP_CLASS_NAME;
+   &PeopleCodeProgramDefn.ObjectValue#2# = &APP_CLASS_EVENT;
+   
+   Local string &strErr;
+   Local integer &int1, &int2;
+   Local boolean &bResult = &PeopleCodeProgramDefn.UpdateProgram(GetHTMLText(HTML.PSM_FORM_HANDLER_TEMPLATE, &psName, &psFormWebLib), &strErr, &int1, &int2);
+   
+   If Not (&bResult) Then
+      throw CreateException(0, 0, "Could not update App Class PeopleCode");
+   End-If;
+   
+   Local boolean &bSaved = &PeopleCodeProgramDefn.SaveNewDefn();
+   
+   If Not (&bSaved) Then
+      throw CreateException(0, 0, "Could not save new App Class Defn");
+   End-If;
+   
+end-method;
+
+
+method CreateWeblib
+   /+ &psId as String, +/
+   /+ &psDescr as String +/
+   /* Record Definition */
+   
+   If Find(&RECORD_NAME_PREFIX, &psId) <> 1 Then
+      throw CreateException(0, 0, "Invalid Web Library Name %1", &psId);
+   End-If;
+   
+   Local %metadata:RecordDefn:RecordDefn_Manager &oRecordDefn_Manager;
+   &oRecordDefn_Manager = create %metadata:RecordDefn:RecordDefn_Manager();
+   
+   Local %metadata:Key &okey = create %metadata:Key();
+   &okey.AddItem(key:Class_Record, &psId);
+   
+   If &oRecordDefn_Manager.DefnExists(&okey) Then
+      throw CreateException(0, 0, "Record already exists");
+   End-If;
+   
+   Local %metadata:RecordDefn:RecordDefn &oRecordDefn = &oRecordDefn_Manager.CreateDefn();
+   
+   &oRecordDefn.RecName = &psId;
+   &oRecordDefn.RecDescr = &psDescr;
+   &oRecordDefn.RecType = 2;
+   
+   Local %metadata:RecordDefn:RecField &oRecField = &oRecordDefn.Append_Rft(&oRecordDefn.Count_Rft);
+   &oRecField.FieldName = &RECORD_FIELD;
+   &oRecField.DefGUICtl = 99;
+   
+   Local boolean &bRet = &oRecordDefn.SaveNewDefn();
+   
+   If Not (&bRet) Then
+      throw CreateException(0, 0, "Could not save new Record Defn");
+   End-If;
+   
+end-method;
+
+
+method CreateIscripts
+   /+ &psId as String, +/
+   /+ &psName as String +/
+   
+   Local %metadata:PeopleCodeProgram:PeopleCodeProgram_Manager &oPeopleCodeProgram_Manager;
+   &oPeopleCodeProgram_Manager = create %metadata:PeopleCodeProgram:PeopleCodeProgram_Manager();
+   
+   Local %metadata:Key &okey = create %metadata:Key();
+   &okey.AddItem(key:Class_Record, &psId);
+   &okey.AddItem(key:Class_Field, &RECORD_FIELD);
+   &okey.AddItem(key:Class_Method, &RECORD_FIELD_EVENT);
+   
+   If &oPeopleCodeProgram_Manager.DefnExists(&okey) Then
+      throw CreateException(0, 0, "Record Field PeopleCode already exists");
+   End-If;
+   
+   Local %metadata:PeopleCodeProgram:PeopleCodeProgram &PeopleCodeProgramDefn = &oPeopleCodeProgram_Manager.CreateDefn();
+   
+   &PeopleCodeProgramDefn.ObjectID#0# = key:Class_Record;
+   &PeopleCodeProgramDefn.ObjectID#1# = key:Class_Field;
+   &PeopleCodeProgramDefn.ObjectID#2# = key:Class_Method;
+   &PeopleCodeProgramDefn.ObjectValue#0# = &psId;
+   &PeopleCodeProgramDefn.ObjectValue#1# = &RECORD_FIELD;
+   &PeopleCodeProgramDefn.ObjectValue#2# = &RECORD_FIELD_EVENT;
+   
+   Local string &sPeopleCode = GetHTMLText(HTML.PSM_FORM_SERVICES_TEMPLATE, &psName | ":" | &APP_CLASS_NAME);
+   
+   Local string &strErr;
+   Local integer &int1, &int2;
+   Local boolean &bResult = &PeopleCodeProgramDefn.UpdateProgram(&sPeopleCode, &strErr, &int1, &int2);
+   
+   Local boolean &bSaved = &PeopleCodeProgramDefn.SaveNewDefn();
+   
+   If Not (&bSaved) Then
+      throw CreateException(0, 0, "Could not save new Record Field PeopleCode Defn");
+   End-If;
+   
+end-method;
+
+
+method CreateCrefs
+   /+ &psFormId as String, +/
+   /+ &psWeblib as String, +/
+   /+ &psParentFolder as String, +/
+   /+ &psLabel as String +/
+   
+   Local ApiObject &oPortal = %Session.GetPortalRegistry();
+   
+   If Not &oPortal.Open(%Portal) Then
+      throw CreateException(0, 0, "Failed to open %1 Portal Registry", %Portal);
+   End-If;
+   
+   Local ApiObject &oParentFldr = &oPortal.FindFolderByName(&psParentFolder);
+   
+   If &oParentFldr = Null Then
+      throw CreateException(0, 0, "Parent Folder %1 does not exist", &psParentFolder);
+   End-If;
+   
+   Local string &sBaseCrefId = Substring(&psFormId, 1, 25);
+   
+   Local string &sFormFldrId = &sBaseCrefId | "_FLDR";
+   Local string &sBuilderCrefId = &sBaseCrefId | "_BLDR";
+   Local string &sRenderCrefId = &sBaseCrefId | "_RNDR";
+   
+   Local ApiObject &oFormFldr = &oPortal.FindFolderByName(&sFormFldrId);
+   
+   If &oFormFldr <> Null Then
+      throw CreateException(0, 0, "Form Folder %1 already exists", &sFormFldrId);
+   End-If;
+   
+   Local ApiObject &oFormBuilderCref = &oPortal.FindCRefByName(&sBuilderCrefId);
+   
+   If &oFormBuilderCref <> Null Then
+      throw CreateException(0, 0, "Form Builder Cref %1 already exists", &sBuilderCrefId);
+   End-If;
+   
+   Local ApiObject &oFormRenderCref = &oPortal.FindCRefByName(&sRenderCrefId);
+   
+   If &oFormRenderCref <> Null Then
+      throw CreateException(0, 0, "Form Render Cref %1 already exists", &sRenderCrefId);
+   End-If;
+   
+   /* Add Form Folder */
+   &oFormFldr = &oParentFldr.Folders.InsertItem(&sFormFldrId, &psLabel);
+   &oFormFldr.Description = "Generated By Form Builder";
+   
+   &oFormFldr.ValidFrom = %Date; /* @todo Is this needed? */
+   &oFormFldr.Save();
+   
+   /* Add Form Builder Cref */
+   &oFormBuilderCref = &oFormFldr.ContentRefs.InsertItem(&sBuilderCrefId, &psLabel | " (Builder)", "LOCAL_NODE", "s/" | &psWeblib | ".ISCRIPT1.FieldFormula." | &ISCRIPT_BUILD);
+   &oFormBuilderCref.URLType = "USCR";
+   &oFormBuilderCref.Save();
+   
+   /* Add Form Render Cref */
+   &oFormRenderCref = &oFormFldr.ContentRefs.InsertItem(&sRenderCrefId, &psLabel, "LOCAL_NODE", "s/" | &psWeblib | ".ISCRIPT1.FieldFormula." | &ISCRIPT_RENDER);
+   &oFormRenderCref.URLType = "USCR";
+   
+   &oFormRenderCref.Save();
+   
+end-method;
+
+
+method ProvisionSecurity
+   /+ &psPermissionList as String, +/
+   /+ &psRecord as String, +/
+   /+ &pasFunctionNames as Array of String +/
+   
+   Local integer &i;
+   For &i = 1 To &pasFunctionNames.Len
+      
+      Local array of any &aaKey = CreateArrayAny(53, &psPermissionList);
+      
+      Local %metadata:Key &key = CreateObjectArray("%metadata:Key", &aaKey);
+      
+      Local %metadata:PermissionListDefn:PermissionListDefn_Manager &oPermissionListDefn_Manager;
+      &oPermissionListDefn_Manager = create %metadata:PermissionListDefn:PermissionListDefn_Manager();
+      
+      If Not (&oPermissionListDefn_Manager.DefnExists(&key)) Then
+         throw CreateException(0, 0, "Permission List %1 Does Not Exists", &psPermissionList);
+      End-If;
+      
+      Local %metadata:PermissionListDefn:PermissionListDefn &oPermissionListDefn = &oPermissionListDefn_Manager.GetDefnToUpdate(&key);
+      
+      Local %metadata:PermissionListDefn:ClmAuthItem &oItem = &oPermissionListDefn.Append_Ait(&oPermissionListDefn.Count_Ait);
+      &oItem.MenuName = &psRecord;
+      &oItem.BarName = "ISCRIPT1";
+      &oItem.BarItemName = "FieldFormula";
+      &oItem.PnlItemName = &pasFunctionNames.Get(&i); /* Ex: IScript_Render */
+      &oItem.AuthorizedActions = 4;
+      
+      Local boolean &bRet = &oPermissionListDefn.UpdateDefn();
+      
+      If Not (&bRet) Then
+         throw CreateException(0, 0, "Failed to provision iScript security");
+      End-If;
+      
+   End-For;
+   
+end-method;

@@ -1,0 +1,36 @@
+import PSM_REGISTER_FORM:FormHandler;
+import PSM_REGISTER_FORM:SERVICE:*;
+
+Function IScript_Build()
+   
+   (create PSM_REGISTER_FORM:FormHandler(%Request, %Response)).OnBuild();
+   
+End-Function;
+
+
+Function IScript_SaveSchema()
+   
+   (create PSM_REGISTER_FORM:FormHandler(%Request, %Response)).OnSaveBuild();
+   
+End-Function;
+
+
+Function IScript_Render()
+   
+   (create PSM_REGISTER_FORM:FormHandler(%Request, %Response)).OnRender();
+   
+End-Function;
+
+
+Function IScript_Submit()
+   
+   (create PSM_REGISTER_FORM:FormHandler(%Request, %Response)).OnSaveForm();
+   
+End-Function;
+
+
+Function IScript_PermissionLists()
+   
+   (create PSM_REGISTER_FORM:SERVICE:PermissionLists(%Response)).Process();
+   
+End-Function;

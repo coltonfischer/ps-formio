@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+   <head>
+      <link rel='stylesheet' href='%StyleSheet(PSM_X_BOOTSTRAP_CSS)'><!-- Bootstrap CSS -->
+      <link rel='stylesheet' href='%StyleSheet(PSM_X_FORMIO_CSS)'><!-- Formio CSS -->
+      <link rel='stylesheet' href='%StyleSheet(PSM_X_FA_CSS)'><!-- Font Awesome Fonts-->
+      <script src='%JavaScript(PSM_X_FORMIO_JS)'></script><!-- Formio JS -->
+      <script>
+         window.onload = function() {
+         Formio.createForm(document.getElementById('formio'), %BIND(:1)).then(function(form) {
+            form.on('submit', function(submission) {
+               console.log(submission);
+               return fetch('%BIND(:2)?postDataBin=y', {
+                   body: JSON.stringify(submission),
+                   headers: {
+                     'content-type': 'application/json'
+                   },
+                   method: 'POST',
+                   mode: 'cors',
+                 })
+                 .then(response => {
+                   form.emit('submitDone', submission)
+                   return response.json();
+                 }).then(function(json) {
+                   alert(JSON.stringify(json));
+                 })
+            });
+         });
+         };
+      </script>
+   </head>
+   <body>
+      <div id='formio'></div>
+   </body>
+</html>

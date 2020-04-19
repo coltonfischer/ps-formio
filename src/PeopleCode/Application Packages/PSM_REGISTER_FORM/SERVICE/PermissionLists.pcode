@@ -1,0 +1,37 @@
+class PermissionLists
+   method PermissionLists(&poResponse As Response);
+   method Process();
+private
+   instance Response &moResponse;
+end-class;
+
+method PermissionLists
+   /+ &poResponse as Response +/
+   &moResponse = &poResponse;
+end-method;
+
+
+method Process
+   
+   Local JsonArray &jaJson = CreateJsonArray();
+   
+   Local Rowset &rsClassDefn = CreateRowset(Record.PSCLASSDEFN);
+   &rsClassDefn.Fill();
+   
+   Local integer &i;
+   For &i = 1 To &rsClassDefn.RowCount
+      
+      Local JsonObject &joJson = CreateJsonObject();
+      
+      Local Record &rClassDefn = &rsClassDefn.GetRow(&i).GetRecord(Record.PSCLASSDEFN);
+      
+      &joJson.AddProperty("name", &rClassDefn.GetField(Field.CLASSID).Value);
+      &joJson.AddProperty("descr", &rClassDefn.GetField(Field.CLASSDEFNDESC).Value);
+      
+      &jaJson.AddJsonObjectElement("", &joJson);
+      
+   End-For;
+   
+   &moResponse.Write(&jaJson.ToString());
+   
+end-method;
